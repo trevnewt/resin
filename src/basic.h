@@ -10,6 +10,7 @@ typedef unsigned __int32 u32;
 typedef unsigned __int64 u64;
 //#endif
 
+typedef u32 b32;
 typedef s32 sb32;
 
 #ifdef X64

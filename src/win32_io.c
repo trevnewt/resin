@@ -54,6 +54,7 @@ static void win32_print(char *string) {
 typedef struct {
     void *memory;
     u32 size;
+    b32 error;
 } win32_file_contents;
 
 static win32_file_contents win32_read_file(char *filename) {
@@ -86,7 +87,7 @@ static win32_file_contents win32_read_file(char *filename) {
         CloseHandle(file_handle);
     }
     else {
-        win32_print("something!");
+        result.error = TRUE;
     }
     
     return result;

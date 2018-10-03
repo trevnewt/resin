@@ -3,5 +3,5 @@
 #define MEM_RESERVE          0x00002000
 #define PAGE_READWRITE       0x04
 
-void* __stdcall VirtualAlloc(void*, ptr, u32, u32);
-sb32  __stdcall VirtualFree (void*, ptr, u32);
+void * __stdcall VirtualAlloc(void *starting_address, ptr size, u32 alloc_type, u32 protect_flags);
+sb32   __stdcall VirtualFree (void *memory, ptr, u32);
