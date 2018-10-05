@@ -1,51 +1,41 @@
-static int strlen(char *string)
+static u32 str_len(char *str)
 {
     int result = 0;
-    while(*string)
+    while(*str)
     {
-        ++string;
+        ++str;
         ++result;
     }
     
     return result;
 }
 
-static void strcpy(char *dst, char *src) {
-    while(*src) {
-        *dst++ = *src++;
-    }
-}
-
-static void strcpy_utf16(u16 *dst, char *src) {
-    while(*src) {
-        *dst++ = *src++;
-    }
-}
-
-static b32 starts_with_substring(char *string, char *substring) {
-    while(*substring)
+static void str_cpy(char *dst, char *src)
+{
+    while(*src)
     {
-        if (*substring != *string)
-        {
-            return FALSE;
-        }
-        substring++;
-        string++;
+        *dst++ = *src++;
     }
-    
-    return TRUE;
 }
 
-static b32 starts_with_substring_utf16(u16 *string, u16 *substring)
+static void str_cpy_utf16(u16 *dst, char *src)
+{
+    while(*src)
+    {
+        *dst++ = *src++;
+    }
+}
+
+static b32 starts_with_substring(char *test, char *substring)
 {
     while(*substring)
     {
-        if (*substring != *string)
+        if (*substring != *test)
         {
             return FALSE;
         }
         substring++;
-        string++;
+        test++;
     }
     
     return TRUE;

@@ -48,7 +48,7 @@ static void win32_print(char *string) {
     void *console_handle = GetStdHandle(STD_OUTPUT_HANDLE);
     
     u32 *bytes_written = 0;
-    WriteFile(console_handle, string, strlen(string), bytes_written, 0);
+    WriteFile(console_handle, string, str_len(string), bytes_written, 0);
 }
 
 typedef struct {
