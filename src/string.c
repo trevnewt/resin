@@ -1,6 +1,6 @@
 static u32 str_len(char *str)
 {
-    int result = 0;
+    u32 result = 0;
     while(*str)
     {
         ++str;
@@ -26,17 +26,17 @@ static void str_cpy_utf16(u16 *dst, char *src)
     }
 }
 
-static b32 starts_with_substring(char *test, char *substring)
+static bool starts_with_substring(char *test, char *substring)
 {
     while(*substring)
     {
         if (*substring != *test)
         {
-            return FALSE;
+            return false;
         }
         substring++;
         test++;
     }
     
-    return TRUE;
+    return true;
 }

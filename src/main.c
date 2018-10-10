@@ -1,7 +1,6 @@
 #include "basic.h"
 #include "string.c"
 
-//#include "win32_crt.c"
 #include "win32_memory.c"
 #include "win32_io.c"
 
@@ -11,13 +10,14 @@
 #define SUBLANG_DEFAULT        0x01
 #define LANG_ENGLISH           0x09
 
+void   __stdcall ExitProcess         (u32 exit_code);
 char * __stdcall GetCommandLineA     (void);
-void * __stdcall BeginUpdateResourceA(const char*file_name, sb32 delete_existing_resources);
-sb32   __stdcall UpdateResourceA     (void *handle, const char *type, const char *name, u16 language, void *data, u32 size);
-sb32   __stdcall EndUpdateResourceA  (void *handle, sb32 discard);
+void * __stdcall BeginUpdateResourceA(const char *file_name, bool delete_existing_resources);
+bool __stdcall UpdateResourceA     (void *handle, const char *type, const char *name, u16 language, void *data, u32 size);
+bool __stdcall EndUpdateResourceA  (void *handle, bool discard);
 
 typedef struct {
-    b32 error;
+    bool error;
     
     char *exe_filename;
     char *icon_filename;
@@ -26,7 +26,7 @@ typedef struct {
     char *product_name;
     char *version;
     char *copyright;
-} args_t;
+} Command_Line_Args;
 
 static u16 add_string(u8 *buf, char *key, char *val)
 {
@@ -51,17 +51,22 @@ static u16 add_string(u8 *buf, char *key, char *val)
 }
 
 static void consume_filename(char **full_string, char **filename) {
-    if (**full_string == '"') {
+    if (**full_string == '"')
+    {
         ++*full_string;
         *filename = *full_string;
-        while (**full_string != '"') {
+        while (**full_string != '"')
+        {
             ++*full_string;
         }
     }
-    else {
+    else
+    {
         *filename = *full_string;
-        while (**full_string != ' ') {
-            if (!**full_string) {
+        while (**full_string != ' ')
+        {
+            if (!**full_string)
+            {
                 return;
             }
             
@@ -73,20 +78,25 @@ static void consume_filename(char **full_string, char **filename) {
     ++*full_string;
 }
 
-static args_t parse_command_line_args(char *string) {
-    // NOTE: Rather than allocate new space for the strings and copy them over, we just point our pointers to the starts of the args and replace delimiting spaces with null terminators.
+static Command_Line_Args parse_command_line_args(char *string)
+{
+    // NOTE: Rather than allocate new space for the strings and copy them over, we just set our pointers to the starts of the args and replace delimiting spaces with null terminators.
     
-    args_t result = {0};
-    result.error = FALSE;
+    Command_Line_Args result = {0};
+    result.error = false;
     
     // NOTE: Advance to the beginning of the arguments.
-    while(*string != ' ') {
-        if (!*string) {
+    while(*string != ' ')
+    {
+        if (!*string)
+        {
             break;
         }
-        if (*string == '"') {
+        if (*string == '"')
+        {
             ++string;
-            while (*string != '"') {
+            while (*string != '"')
+            {
                 ++string;
             }
         }
@@ -94,12 +104,16 @@ static args_t parse_command_line_args(char *string) {
     }
     
     // NOTE: Consume an argument each time through this loop.
-    while(*string) {
-        if (*string == ' ') {
+    while(*string)
+    {
+        if (*string == ' ')
+        {
             ++string;
         }
-        else if (*string == '/') {
-            if (starts_with_substring(string, "/i:")) {
+        else if (*string == '/')
+        {
+            if (starts_with_substring(string, "/i:"))
+            {
                 string += 3;
                 consume_filename(&string, &result.icon_filename);
             }
@@ -121,7 +135,7 @@ static args_t parse_command_line_args(char *string) {
             }
             else {
                 win32_print("Unrecognized option.\n");
-                result.error = TRUE;
+                result.error = true;
                 break;
             }
         }
@@ -133,7 +147,7 @@ static args_t parse_command_line_args(char *string) {
             else
             {
                 win32_print("You can't specify two executables!\n");
-                result.error = TRUE;
+                result.error = true;
                 break;
             }
         }
@@ -142,61 +156,86 @@ static args_t parse_command_line_args(char *string) {
     return result;
 }
 
-void main(void) {
-    args_t args = parse_command_line_args(GetCommandLineA());
-    
-    if (!args.error) {
-        void *exe_handle = BeginUpdateResourceA(args.exe_filename, TRUE);
-        if (exe_handle) {
-            if (args.icon_filename) {
-                win32_file_contents icon = win32_read_file(args.icon_filename);
-                if (!icon.error) {
-                    icon_dir_header *id_header = (icon_dir_header *)icon.memory;
-                    int image_count = id_header->image_count;
-                    
-                    //
-                    icon_header new = {0};
-                    new.resource_type = id_header->resource_type;
-                    //
-                    
-                    icon_dir_entry *first_entry = (icon_dir_entry *)((u8 *)icon.memory + sizeof(icon_dir_header));
-                    
-                    for (u16 i = 0; i < image_count; ++i) {
-                        icon_dir_entry *id_entry = first_entry + i;
-                        
-                        u32 size = id_entry->size;
-                        u8 *memory = (u8 *)icon.memory + id_entry->offset;
-                        icon_image *image = (icon_image *)memory;
-                        if (image->header.biWidth <= 256)
-                        {
-                            sb32 result = UpdateResourceA(exe_handle, RT_ICON, (char *)((u64)i+102), MAKELANGID(LANG_ENGLISH, SUBLANG_DEFAULT), (void *)memory, size);
-                            
-                            new.data[new.image_count].width = id_entry->width;
-                            new.data[new.image_count].height = id_entry->height;
-                            new.data[new.image_count].color_count = id_entry->color_count;
-                            new.data[new.image_count].reserved = id_entry->reserved;
-                            new.data[new.image_count].color_planes = id_entry->color_planes;
-                            new.data[new.image_count].bits_per_pixel = id_entry->bits_per_pixel;
-                            new.data[new.image_count].size = id_entry->size;
-                            new.data[new.image_count].id = i+102;
-                            
-                            new.image_count += 1;
-                        }
-                    }
-                    
-                    //u32 size = sizeof(icon_dir_header) + (sizeof(icon_dir_entry) * image_count);
-                    u32 size = sizeof(icon_dir_header) + (sizeof(icon_data) * new.image_count);
-                    
-                    //sb32 result = UpdateResourceA(exe_handle, RT_GROUP_ICON, "MAINICON", MAKELANGID(LANG_ENGLISH, SUBLANG_DEFAULT), &new, size);
-                    sb32 result = UpdateResourceA(exe_handle, RT_GROUP_ICON, "a", MAKELANGID(LANG_ENGLISH, SUBLANG_DEFAULT), &new, size);
-                }
-                else {
-                    win32_print("Unable to find icon file.\n");
-                }
+static void update_icon(void *exe_handle, char *icon_filename)
+{
+    Win32FileContents ico = win32_read_file(icon_filename);
+    if (!ico.error)
+    {
+        ICONDIR *src_header = (ICONDIR *)ico.memory;
+        ICONDIRENTRY *src_entries = (ICONDIRENTRY *)(src_header + 1);
+        
+        size bytes = sizeof(ICONDIR) + (src_header->image_count * sizeof(GRPICONDIRENTRY));
+        ICONDIR *dst_header = (ICONDIR *)VirtualAlloc(0, bytes, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
+        dst_header->resource_type = src_header->resource_type;
+        GRPICONDIRENTRY *dst_entries = (GRPICONDIRENTRY *)(dst_header + 1);
+        
+        for (u16 i = 0; i < src_header->image_count; ++i)
+        {
+            u16 id = 147 + i; // NOTE: Random constant.
+            ICONDIRENTRY *src_entry = src_entries + i;
+            u8 *image_data = (u8 *)ico.memory + src_entry->image_offset;
+            
+            // NOTE: Verify the actual width of the image data.
+            u32 image_width;
+            if (image_data[1] == 'P' && image_data[2] == 'N' && image_data[3] == 'G')
+            {
+                // NOTE: This icon is stored as a PNG. Windows recommends that 256x256 icons (the largest it displays) be stored in PNG format to avoid the large sizes that uncompressed BMP would incur, but any icon in a .ico file can be stored as a PNG. The width is located at a 16-byte offset, and must be byte-reversed - integers in PNG are in network byte order (big endian).
+                u8 *png_width = image_data + 16;
+                image_width = png_width[0] << 24 | png_width[1] << 16 | png_width[2] << 8 | png_width[3];
+            }
+            else
+            {
+                // NOTE: This icon is stored as a BMP (without its file header structure). The width is located at a 4-byte offset.
+                image_width = *(u32 *)(image_data + 4);
             }
             
-            ptr size = 1024*1024; // NOTE: 1MB.
-            u8 *buf = (u8 *)VirtualAlloc(0, size, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
+            // NOTE: If there are icons larger than 256x256 in the .ico file, we don't want to include them - they may cause bad behavior, and Windows doesn't display them anyway, so they would just bloat our executable.
+            if (image_width <= 256)
+            {
+                UpdateResourceA(exe_handle, RT_ICON, MAKEINTRESOURCE(id), MAKELANGID(LANG_ENGLISH, SUBLANG_DEFAULT), image_data, src_entry->size);
+                
+                GRPICONDIRENTRY *dst_entry = dst_entries + dst_header->image_count;
+                
+                dst_entry->width          = src_entry->width;
+                dst_entry->height         = src_entry->height;
+                dst_entry->color_count    = src_entry->color_count;
+                dst_entry->color_planes   = src_entry->color_planes;
+                dst_entry->bits_per_pixel = src_entry->bits_per_pixel;
+                dst_entry->size           = src_entry->size;
+                dst_entry->id             = id;
+                
+                dst_header->image_count += 1;
+            }
+        }
+        
+        u32 size = sizeof(ICONDIR) + (sizeof(GRPICONDIRENTRY) * dst_header->image_count);
+        
+        UpdateResourceA(exe_handle, RT_GROUP_ICON, "MAINICON", MAKELANGID(LANG_ENGLISH, SUBLANG_DEFAULT), dst_header, size);
+    }
+    else
+    {
+        win32_print("Unable to find icon file.\n");
+    }
+}
+
+void mainCRTStartup(void)
+{
+    Command_Line_Args args = parse_command_line_args(GetCommandLineA());
+    
+    if (!args.error)
+    {
+        void *exe_handle = BeginUpdateResourceA(args.exe_filename, true);
+        if (exe_handle)
+        {
+            if (args.icon_filename)
+            {
+                update_icon(exe_handle, args.icon_filename);
+            }
+            
+            // NOTE: Set the string properties.
+            
+            size bytes = 1024*1024; // NOTE: 1MB.
+            u8 *buf = (u8 *)VirtualAlloc(0, bytes, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
             
             VS_VERSIONINFO *ver_info = (VS_VERSIONINFO *)buf;
             ver_info->length = sizeof(VS_VERSIONINFO) + sizeof(StringFileInfo) + sizeof(VarFileInfo); // NOTE: This is not the full size of the resource block yet, but it will be incremented as we procedurally add pieces below.
@@ -214,7 +253,7 @@ void main(void) {
             
             buf += sizeof(StringFileInfo);
             
-            // TODO: Like where we add a Var below, we could do a loop here to add multiple StringTables, one for each language.
+            // TODO: Like where we add a Var below, we could do a loop here to add multiple StringTables, one for each language. For now, the language is hard-coded to American English.
             StringTable *str_table = (StringTable *)buf;
             str_table->length = sizeof(StringTable);
             str_table->type = 1;
@@ -225,22 +264,26 @@ void main(void) {
             buf += sizeof(StringTable);
             
             u16 total_str_size = 0;
-            if (args.file_description) {
+            if (args.file_description)
+            {
                 u16 str_size = add_string(buf, "FileDescription", args.file_description);
                 buf += str_size;
                 total_str_size += str_size;
             }
-            if (args.copyright) {
+            if (args.copyright)
+            {
                 u16 str_size = add_string(buf, "LegalCopyright", args.copyright);
                 buf += str_size;
                 total_str_size += str_size;
             }
-            if (args.product_name) {
+            if (args.product_name)
+            {
                 u16 str_size = add_string(buf, "ProductName", args.product_name);
                 buf += str_size;
                 total_str_size += str_size;
             }
-            if (args.version) {
+            if (args.version)
+            {
                 //ver_info->value.file_version_ms = 1;
                 //ver_info->value.prod_version_ms = 1;
                 
@@ -275,12 +318,15 @@ void main(void) {
             var_info->length += sizeof(Var);
             buf += sizeof(Var);
             
-            sb32 result = UpdateResourceA(exe_handle, RT_VERSION, (char *)VS_VERSION_INFO, MAKELANGID(LANG_ENGLISH, SUBLANG_DEFAULT), ver_info, ver_info->length);
+            bool result = UpdateResourceA(exe_handle, RT_VERSION, (char *)VS_VERSION_INFO, MAKELANGID(LANG_ENGLISH, SUBLANG_DEFAULT), ver_info, ver_info->length);
             
-            EndUpdateResourceA(exe_handle, FALSE);
+            EndUpdateResourceA(exe_handle, false);
         }
-        else {
+        else
+        {
             win32_print("Not a valid executable file.\n");
         }
     }
+    
+    ExitProcess(0);
 }

@@ -10,14 +10,13 @@ typedef unsigned __int32 u32;
 typedef unsigned __int64 u64;
 #endif
 
-typedef u32 b32;
-typedef s32 sb32;
+typedef s32 bool;
 
-#ifdef X64
-typedef u64 ptr;
+#ifdef x86
+typedef u32 size;
 #else
-typedef u32 ptr;
+typedef u64 size;
 #endif
 
-#define FALSE 0
-#define TRUE  1
+#define false 0
+#define true  1

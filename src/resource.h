@@ -1,4 +1,6 @@
-/* Icon */
+#define MAKEINTRESOURCE(a) (char *)((u64)a)
+
+/* ICON Constants & Structs */
 
 #define RT_ICON       ((char *)3)
 #define RT_GROUP_ICON ((char *)14)
@@ -11,6 +13,7 @@ typedef struct {
     u16 image_count;
 } icon_dir_header;
 
+// NOTE: This data structure represents the format of an icon resource when it's stored in an .ico file.
 typedef struct {
     u8 width;
     u8 height;
@@ -19,9 +22,10 @@ typedef struct {
     u16 color_planes;
     u16 bits_per_pixel;
     u32 size;
-    u32 offset;
-} icon_dir_entry;
+    u32 image_offset;
+} ICONDIRENTRY;
 
+// NOTE: This data structure represents the format of an icon resource when it's stored in the resource section of an executable.
 typedef struct {
     u8  width;          // Pixel width of the image.
     u8  height;         // Pixel height of the image.
@@ -31,14 +35,14 @@ typedef struct {
     u16 bits_per_pixel; // Must be 32.
     u32 size;           // Size in bytes of the image.
     u16 id;             // The ID of this image. Always 1?
-} icon_data;
+} GRPICONDIRENTRY;
 
+// NOTE: Header that precedes icon structures, both in .ico files and in executables.
 typedef struct {
-    u16 reserved;       // NOTE:
-    u16 resource_type;  //
-    u16 image_count;    //
-    icon_data data[10]; //
-} icon_header;
+    u16 reserved;       // NOTE: Always 0.
+    u16 resource_type;  // Eh?
+    u16 image_count;    // NOTE: The number of individual icons following this header.
+} ICONDIR;
 #pragma pack(pop)
 
 #pragma pack(push, 1)
@@ -57,6 +61,14 @@ typedef struct {
 } BITMAPINFOHEADER;
 
 typedef struct {
+    u64 signature;
+    u32 chunk_length;
+    u32 chunk_type_name;
+    u32 width;
+    u32 height;
+} PNGHeader;
+
+typedef struct {
     u8 rgbBlue;
     u8 rgbGreen;
     u8 rgbRed;
@@ -68,14 +80,14 @@ typedef struct {
     RGBQUAD quad[1];
     u8 a[1];
     u8 b[1];
-} icon_image;
+} ICONIMAGE;
 #pragma pack(pop)
 
-/* Version Info */
+/* VERSION INFO Constants & Structs */
 
 #define VS_VERSION_INFO 1
 
-// NOTE: Structs used to format our block of binary data correctly before handing it to UpdateResourceA(). After every "key" member in the following structs, we need to be aligned to a 32-bit boundary, hence the occasional padding.
+// NOTE: These structs used to format our block of binary data correctly before handing it to UpdateResourceA(). After every "key" member in the following structs, we need to be aligned to a 32-bit boundary, hence the occasional padding.
 
 #pragma pack(push, 1)
 typedef struct {
