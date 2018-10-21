@@ -1,26 +1,25 @@
-static u32 str_len(char *str)
+static size str_len(char *str)
 {
-    u32 result = 0;
-    while(*str)
+    size len = 0;
+    while (str[len])
     {
-        ++str;
-        ++result;
+        ++len;
     }
     
-    return result;
+    return len;
 }
 
 static void str_cpy(char *dst, char *src)
 {
-    while(*src)
+    while (*src)
     {
         *dst++ = *src++;
     }
 }
 
-static void str_cpy_utf16(u16 *dst, char *src)
+static void strcpy_char_to_wide(u16 *dst, char *src)
 {
-    while(*src)
+    while (*src)
     {
         *dst++ = *src++;
     }
@@ -28,7 +27,7 @@ static void str_cpy_utf16(u16 *dst, char *src)
 
 static bool starts_with_substring(char *test, char *substring)
 {
-    while(*substring)
+    while (*substring)
     {
         if (*substring != *test)
         {

@@ -6,15 +6,8 @@
 
 #include "resource.h"
 
-#define MAKELANGID(p, s)       ((((u16)(s)) << 10) | (u16)(p))
-#define SUBLANG_DEFAULT        0x01
-#define LANG_ENGLISH           0x09
-
 void   __stdcall ExitProcess         (u32 exit_code);
 char * __stdcall GetCommandLineA     (void);
-void * __stdcall BeginUpdateResourceA(const char *file_name, bool delete_existing_resources);
-bool __stdcall UpdateResourceA     (void *handle, const char *type, const char *name, u16 language, void *data, u32 size);
-bool __stdcall EndUpdateResourceA  (void *handle, bool discard);
 
 typedef struct {
     bool error;
@@ -26,134 +19,34 @@ typedef struct {
     char *product_name;
     char *version;
     char *copyright;
-} Command_Line_Args;
+} CL_Args;
 
-static u16 add_string(u8 *buf, char *key, char *val)
+static u16 add_string_resource(u16 *dst, char *key, char *val)
 {
-    u16 key_len = (u16)str_len(key) + 1; // NOTE: +1 for \0 terminator.
-    u16 val_len = (u16)str_len(val) + 1; // NOTE: +1 for \0 terminator.
-    u16 pad_1 = (key_len % 2) ? 0 : 1; // NOTE: The first pad comes after three 16-bit values and then the key. If the key has an even number of elements, then we need a 16-bit pad to align the the "value" array to a 32-bit boundary.
-    u16 pad_2 = (val_len % 2) ? 1 : 0;// NOTE: This pad comes after the value array, which we just ensured will start at a 32-bit boundary. If the value has an odd number of elements, then we need a 16-bit pad to align the start of the next block to a 32-bit boundary.
-    u16 total_size = sizeof(u16)*(3 + key_len + pad_1 + val_len + pad_2);
+    size key_len = str_len(key) + 1; // NOTE: +1 for \0 terminator.
+    size val_len = str_len(val) + 1; // NOTE: +1 for \0 terminator.
     
-    u16 *word = (u16 *)buf;
+    // NOTE: The first pad comes after three 16-bit values and the key. If the key has an even length, then we need a 16-bit pad to align the subsequent "val" array to a 32-bit boundary. The second pad comes after "val", which we just ensured will start at a 32-bit boundary. If "val" has an odd length, then we need a 16-bit pad to make sure we end on a 32-bit boundary.
+    u8 pad1_len = (key_len % 2) ? 0 : 1;
+    u8 pad2_len = (val_len % 2) ? 1 : 0;
     
-    *word++ = total_size; // NOTE: Size of block in BYTES.
-    *word++ = val_len;    // NOTE: Size of value in WORDS.
-    *word++ = 1;          // NOTE: Type. 0 for binary, 1 for text.
-    str_cpy_utf16(word, key);
-    word += key_len;
-    word += pad_1;
-    str_cpy_utf16(word, val);
-    word += val_len;
+    size total_size = sizeof(u16) * (3 + key_len + pad1_len + val_len + pad2_len);
     
-    return total_size;
-}
-
-static void consume_filename(char **full_string, char **filename) {
-    if (**full_string == '"')
+    if (total_size <= MAX_u16)
     {
-        ++*full_string;
-        *filename = *full_string;
-        while (**full_string != '"')
-        {
-            ++*full_string;
-        }
+        dst[0] = (u16)total_size; // NOTE: Size of string resource block in BYTES.
+        dst[1] = (u16)val_len;    // NOTE: Size of value in WORDS.
+        dst[2] = 1;               // NOTE: Type. 0 for binary, 1 for text.
+        
+        strcpy_char_to_wide(dst, key);
+        strcpy_char_to_wide(dst + key_len + pad1_len, val);
     }
     else
     {
-        *filename = *full_string;
-        while (**full_string != ' ')
-        {
-            if (!**full_string)
-            {
-                return;
-            }
-            
-            ++*full_string;
-        }
+        total_size = 0;
     }
     
-    **full_string = 0;
-    ++*full_string;
-}
-
-static Command_Line_Args parse_command_line_args(char *string)
-{
-    // NOTE: Rather than allocate new space for the strings and copy them over, we just set our pointers to the starts of the args and replace delimiting spaces with null terminators.
-    
-    Command_Line_Args result = {0};
-    result.error = false;
-    
-    // NOTE: Advance to the beginning of the arguments.
-    while(*string != ' ')
-    {
-        if (!*string)
-        {
-            break;
-        }
-        if (*string == '"')
-        {
-            ++string;
-            while (*string != '"')
-            {
-                ++string;
-            }
-        }
-        ++string;
-    }
-    
-    // NOTE: Consume an argument each time through this loop.
-    while(*string)
-    {
-        if (*string == ' ')
-        {
-            ++string;
-        }
-        else if (*string == '/')
-        {
-            if (starts_with_substring(string, "/i:"))
-            {
-                string += 3;
-                consume_filename(&string, &result.icon_filename);
-            }
-            else if (starts_with_substring(string, "/c:")) {
-                string += 3;
-                consume_filename(&string, &result.copyright);
-            }
-            else if (starts_with_substring(string, "/n:")) {
-                string += 3;
-                consume_filename(&string, &result.product_name);
-            }
-            else if (starts_with_substring(string, "/d:")) {
-                string += 3;
-                consume_filename(&string, &result.file_description);
-            }
-            else if (starts_with_substring(string, "/v:")) {
-                string += 3;
-                consume_filename(&string, &result.version);
-            }
-            else {
-                win32_print("Unrecognized option.\n");
-                result.error = true;
-                break;
-            }
-        }
-        else {
-            if (!result.exe_filename)
-            {
-                consume_filename(&string, &result.exe_filename);
-            }
-            else
-            {
-                win32_print("You can't specify two executables!\n");
-                result.error = true;
-                break;
-            }
-        }
-    }
-    
-    return result;
+    return (u16)total_size;
 }
 
 static void update_icon(void *exe_handle, char *icon_filename)
@@ -220,113 +113,177 @@ static void update_icon(void *exe_handle, char *icon_filename)
 
 void mainCRTStartup(void)
 {
-    Command_Line_Args args = parse_command_line_args(GetCommandLineA());
+    int exit_code = 0;
     
-    if (!args.error)
+    // NOTE: Parse the command line string! Rather than allocate new strings for each arg and copy them over, we just set our pointers to the starts of the args and replace delimiting spaces (and quotes) with null terminators.
+    
+    char *this_exe_filename = 0;
+    char *exe_filename = 0;
+    
+    char *icon_filename = 0;
+    char *file_description = 0;
+    char *product_name = 0;
+    char *version = 0;
+    char *copyright = 0;
+    
+    char *str = GetCommandLineA();
+    char **arg = &this_exe_filename;
+    
+    bool in_quotes = false;
+    bool at_option = false;
+    bool at_arg = false;
+    
+    while (*str != 0)
     {
-        void *exe_handle = BeginUpdateResourceA(args.exe_filename, true);
-        if (exe_handle)
+        if (*str == '"')
         {
-            if (args.icon_filename)
-            {
-                update_icon(exe_handle, args.icon_filename);
-            }
-            
-            // NOTE: Set the string properties.
-            
-            size bytes = 1024*1024; // NOTE: 1MB.
-            u8 *buf = (u8 *)VirtualAlloc(0, bytes, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
-            
-            VS_VERSIONINFO *ver_info = (VS_VERSIONINFO *)buf;
-            ver_info->length = sizeof(VS_VERSIONINFO) + sizeof(StringFileInfo) + sizeof(VarFileInfo); // NOTE: This is not the full size of the resource block yet, but it will be incremented as we procedurally add pieces below.
-            ver_info->value_length = sizeof(VS_FIXEDFILEINFO);
-            str_cpy_utf16(ver_info->key, "VS_VERSION_INFO");
-            
-            ver_info->value.signature = 0xFEEF04BD; // NOTE: This is crucial. If you don't set it, you'll get no results.
-            
-            buf += sizeof(VS_VERSIONINFO);
-            
-            StringFileInfo *str_info = (StringFileInfo *)buf;
-            str_info->length = sizeof(StringFileInfo);
-            str_info->type = 1;
-            str_cpy_utf16(str_info->key, "StringFileInfo");
-            
-            buf += sizeof(StringFileInfo);
-            
-            // TODO: Like where we add a Var below, we could do a loop here to add multiple StringTables, one for each language. For now, the language is hard-coded to American English.
-            StringTable *str_table = (StringTable *)buf;
-            str_table->length = sizeof(StringTable);
-            str_table->type = 1;
-            str_cpy_utf16(str_table->key, "040904b0");
-            
-            ver_info->length += sizeof(StringTable);
-            str_info->length += sizeof(StringTable);
-            buf += sizeof(StringTable);
-            
-            u16 total_str_size = 0;
-            if (args.file_description)
-            {
-                u16 str_size = add_string(buf, "FileDescription", args.file_description);
-                buf += str_size;
-                total_str_size += str_size;
-            }
-            if (args.copyright)
-            {
-                u16 str_size = add_string(buf, "LegalCopyright", args.copyright);
-                buf += str_size;
-                total_str_size += str_size;
-            }
-            if (args.product_name)
-            {
-                u16 str_size = add_string(buf, "ProductName", args.product_name);
-                buf += str_size;
-                total_str_size += str_size;
-            }
-            if (args.version)
-            {
-                //ver_info->value.file_version_ms = 1;
-                //ver_info->value.prod_version_ms = 1;
-                
-                u16 str_size = add_string(buf, "FileVersion", args.version);
-                buf += str_size;
-                total_str_size += str_size;
-                
-                str_size = add_string(buf, "ProductVersion", args.version);
-                buf += str_size;
-                total_str_size += str_size;
-            }
-            
-            ver_info->length  += total_str_size;
-            str_info->length  += total_str_size;
-            str_table->length += total_str_size;
-            
-            VarFileInfo *var_info = (VarFileInfo *)buf;
-            var_info->length = sizeof(VarFileInfo);
-            str_cpy_utf16(var_info->key, "VarFileInfo");
-            
-            buf += sizeof(VarFileInfo);
-            
-            // TODO: This part could become a loop to add multiple languages.
-            Var *var = (Var *)buf;
-            var->length = sizeof(Var);
-            var->value_length = sizeof(u32);
-            str_cpy_utf16(var->key, "Translation");
-            var->language = MAKELANGID(LANG_ENGLISH, SUBLANG_DEFAULT);
-            var->code_page = 0x04b0;
-            
-            ver_info->length += sizeof(Var);
-            var_info->length += sizeof(Var);
-            buf += sizeof(Var);
-            
-            bool result = UpdateResourceA(exe_handle, RT_VERSION, (char *)VS_VERSION_INFO, MAKELANGID(LANG_ENGLISH, SUBLANG_DEFAULT), ver_info, ver_info->length);
-            
-            EndUpdateResourceA(exe_handle, false);
+            in_quotes = !in_quotes;
+            *str = 0;
         }
-        else
+        else if (*str == ' ' && !in_quotes)
         {
-            win32_print("Not a valid executable file.\n");
+            at_arg = false;
+            *str = 0;
         }
+        else if (*str == '/' && !at_arg && !in_quotes)
+        {
+            at_option = true;
+        }
+        else if (at_option)
+        {
+            at_option = false;
+            switch (*str)
+            {
+                case 'c':
+                {
+                    arg = &copyright;
+                }
+                break;
+                case 'i':
+                {
+                    arg = &icon_filename;
+                }
+                break;
+                default:
+                {
+                    //win32_print_2("Unrecognized option: \"", *str, "\"\n");
+                }
+                break;
+            }
+        }
+        else if (!at_arg)
+        {
+            at_arg = true;
+            *arg = str;
+            arg = &exe_filename;
+        }
+        
+        ++str;
     }
     
-    ExitProcess(0);
+    void *exe_handle = BeginUpdateResourceA(exe_filename, true);
+    if (exe_handle)
+    {
+        if (icon_filename)
+        {
+            update_icon(exe_handle, icon_filename);
+        }
+        
+        // NOTE: Set the string properties.
+        
+        size bytes = 1024*1024; // NOTE: 1MB.
+        u8 *buf = (u8 *)VirtualAlloc(0, bytes, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
+        
+        VS_VERSIONINFO *ver_info = (VS_VERSIONINFO *)buf;
+        ver_info->length = sizeof(VS_VERSIONINFO) + sizeof(StringFileInfo) + sizeof(VarFileInfo); // NOTE: This is not the full size of the resource block yet, but it will be incremented as we procedurally add pieces below.
+        ver_info->value_length = sizeof(VS_FIXEDFILEINFO);
+        strcpy_char_to_wide(ver_info->key, "VS_VERSION_INFO");
+        
+        ver_info->value.signature = 0xFEEF04BD; // NOTE: This is crucial. If you don't set it, you'll get no results.
+        
+        buf += sizeof(VS_VERSIONINFO);
+        
+        StringFileInfo *str_info = (StringFileInfo *)buf;
+        str_info->length = sizeof(StringFileInfo);
+        str_info->type = 1;
+        strcpy_char_to_wide(str_info->key, "StringFileInfo");
+        
+        buf += sizeof(StringFileInfo);
+        
+        // TODO: Like where we add a Var below, we could do a loop here to add multiple StringTables, one for each language. For now, the language is hard-coded to American English.
+        StringTable *str_table = (StringTable *)buf;
+        str_table->length = sizeof(StringTable);
+        str_table->type = 1;
+        strcpy_char_to_wide(str_table->key, "040904b0");
+        
+        ver_info->length += sizeof(StringTable);
+        str_info->length += sizeof(StringTable);
+        buf += sizeof(StringTable);
+        
+        u16 total_str_size = 0;
+        if (file_description)
+        {
+            u16 str_size = add_string_resource((u16 *)buf, "FileDescription", file_description);
+            buf += str_size;
+            total_str_size += str_size;
+        }
+        if (copyright)
+        {
+            u16 str_size = add_string_resource((u16 *)buf, "LegalCopyright", copyright);
+            buf += str_size;
+            total_str_size += str_size;
+        }
+        if (product_name)
+        {
+            u16 str_size = add_string_resource((u16 *)buf, "ProductName", product_name);
+            buf += str_size;
+            total_str_size += str_size;
+        }
+        if (version)
+        {
+            //ver_info->value.file_version_ms = 1;
+            //ver_info->value.prod_version_ms = 1;
+            
+            u16 str_size = add_string_resource((u16 *)buf, "FileVersion", version);
+            buf += str_size;
+            total_str_size += str_size;
+            
+            str_size = add_string_resource((u16 *)buf, "ProductVersion", version);
+            buf += str_size;
+            total_str_size += str_size;
+        }
+        
+        ver_info->length  += total_str_size;
+        str_info->length  += total_str_size;
+        str_table->length += total_str_size;
+        
+        VarFileInfo *var_info = (VarFileInfo *)buf;
+        var_info->length = sizeof(VarFileInfo);
+        strcpy_char_to_wide(var_info->key, "VarFileInfo");
+        
+        buf += sizeof(VarFileInfo);
+        
+        // TODO: This part could become a loop to add multiple languages.
+        Var *var = (Var *)buf;
+        var->length = sizeof(Var);
+        var->value_length = sizeof(u32);
+        strcpy_char_to_wide(var->key, "Translation");
+        var->language = MAKELANGID(LANG_ENGLISH, SUBLANG_DEFAULT);
+        var->code_page = 0x04b0;
+        
+        ver_info->length += sizeof(Var);
+        var_info->length += sizeof(Var);
+        buf += sizeof(Var);
+        
+        bool result = UpdateResourceA(exe_handle, RT_VERSION, (char *)VS_VERSION_INFO, MAKELANGID(LANG_ENGLISH, SUBLANG_DEFAULT), ver_info, ver_info->length);
+        
+        EndUpdateResourceA(exe_handle, false);
+    }
+    else
+    {
+        win32_print("Not a valid executable file: blah.\n");
+        exit_code = 1;
+    }
+    
+    ExitProcess(exit_code);
 }

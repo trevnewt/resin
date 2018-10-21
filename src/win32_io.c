@@ -63,8 +63,24 @@ static void win32_print(char *string)
     void *console_handle = GetStdHandle(STD_OUTPUT_HANDLE);
     
     u32 *bytes_written = 0;
-    WriteFile(console_handle, string, str_len(string), bytes_written, 0);
+    WriteFile(console_handle, string, (u32)str_len(string), bytes_written, 0);
 }
+
+#if 0
+static void win32_print_2(char *a, char *b, char *c)
+{
+    u32 len = (u32)str_len(a) + (u32)str_len(b) + (u32)str_len(c);
+    void *str = malloc(len);
+    str_cpy(str, a);
+    str_cpy(str, b);
+    str_cpy(str, c);
+    
+    u32 bytes_written = 0;
+    WriteFile(GetStdHandle(STD_OUTPUT_HANDLE), str, len, &bytes_written, 0);
+    
+    free(str);
+}
+#endif
 
 static Win32FileContents win32_read_file(char *file_name)
 {

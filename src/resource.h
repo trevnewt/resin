@@ -1,3 +1,11 @@
+#define MAKELANGID(p, s)       ((((u16)(s)) << 10) | (u16)(p))
+#define SUBLANG_DEFAULT        0x01
+#define LANG_ENGLISH           0x09
+
+void * __stdcall BeginUpdateResourceA(const char *filename, bool delete_existing);
+bool   __stdcall UpdateResourceA     (void *handle, const char *type, const char *name, u16 language, void *data, u32 size);
+bool   __stdcall EndUpdateResourceA  (void *handle, bool discard);
+
 #define MAKEINTRESOURCE(a) (char *)((u64)a)
 
 /* ICON Constants & Structs */
@@ -7,80 +15,36 @@
 #define RT_VERSION    ((char *)16)
 
 #pragma pack(push, 2)
-typedef struct {
-    u16 reserved;
-    u16 resource_type;
-    u16 image_count;
-} icon_dir_header;
-
-// NOTE: This data structure represents the format of an icon resource when it's stored in an .ico file.
-typedef struct {
-    u8 width;
-    u8 height;
-    u8 color_count;
-    u8 reserved;
-    u16 color_planes;
-    u16 bits_per_pixel;
-    u32 size;
-    u32 image_offset;
-} ICONDIRENTRY;
-
-// NOTE: This data structure represents the format of an icon resource when it's stored in the resource section of an executable.
-typedef struct {
-    u8  width;          // Pixel width of the image.
-    u8  height;         // Pixel height of the image.
-    u8  color_count;    // Number of colors in pallette (0 if >=8bpp).
-    u8  reserved;       // Must be 0.
-    u16 color_planes;   // Color planes. Should be 0 or 1.
-    u16 bits_per_pixel; // Must be 32.
-    u32 size;           // Size in bytes of the image.
-    u16 id;             // The ID of this image. Always 1?
-} GRPICONDIRENTRY;
-
 // NOTE: Header that precedes icon structures, both in .ico files and in executables.
 typedef struct {
     u16 reserved;       // NOTE: Always 0.
-    u16 resource_type;  // Eh?
-    u16 image_count;    // NOTE: The number of individual icons following this header.
+    u16 resource_type;  // NOTE: Always 1.
+    u16 image_count;    // NOTE: The number of icons following this header.
 } ICONDIR;
-#pragma pack(pop)
 
-#pragma pack(push, 1)
+// NOTE: This data structure represents the format of an icon resource when it's stored in an .ico file. 
 typedef struct {
-    u32 biSize;
-    s32 biWidth;
-    s32 biHeight;
-    u16 biPlanes;
-    u16 biBitCount;
-    u32 biCompression;
-    u32 biSizeImage;
-    s32 biXPelsPerMeter;
-    s32 biYPelsPerMeter;
-    u32 biClrUsed;
-    u32 biClrImportant;
-} BITMAPINFOHEADER;
+    u8 width;           // NOTE: Width in pixels.
+    u8 height;          // NOTE: Height in pixels.
+    u8 color_count;     // NOTE: Colors in palette (0 if >= 8bpp).
+    u8 reserved;        // NOTE: Always 0.
+    u16 color_planes;   // NOTE: Color plane count. Should be 0 or 1.
+    u16 bits_per_pixel; // NOTE: Bit-depth.
+    u32 size;           // NOTE: Size of the image data in bytes.
+    u32 image_offset;
+} ICONDIRENTRY;
 
+// NOTE: This data structure represents the format of an icon resource when it's stored in the resource section of an executable. Note that it differs crucially from ICONDIRENTRY in that its final member is a 2-byte ID rather than a 4-byte offset.
 typedef struct {
-    u64 signature;
-    u32 chunk_length;
-    u32 chunk_type_name;
-    u32 width;
-    u32 height;
-} PNGHeader;
-
-typedef struct {
-    u8 rgbBlue;
-    u8 rgbGreen;
-    u8 rgbRed;
-    u8 rgbReserved;
-} RGBQUAD;
-
-typedef struct {
-    BITMAPINFOHEADER header;
-    RGBQUAD quad[1];
-    u8 a[1];
-    u8 b[1];
-} ICONIMAGE;
+    u8  width;
+    u8  height;
+    u8  color_count;
+    u8  reserved;
+    u16 color_planes;
+    u16 bits_per_pixel;
+    u32 size;
+    u16 id;             // NOTE: Unique ID matching the one passed to UpdateResourceA along with the corresponding image data.
+} GRPICONDIRENTRY;
 #pragma pack(pop)
 
 /* VERSION INFO Constants & Structs */

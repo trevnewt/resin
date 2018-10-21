@@ -18,5 +18,10 @@ typedef u32 size;
 typedef u64 size;
 #endif
 
+#define MAX_u8  255
+#define MAX_u16 65535
+#define MAX_u32 4294967295
+#define MAX_u64 18446744073709551615
+
 #define false 0
 #define true  1
