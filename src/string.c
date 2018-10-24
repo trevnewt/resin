@@ -17,25 +17,10 @@ static void str_cpy(char *dst, char *src)
     }
 }
 
-static void strcpy_char_to_wide(u16 *dst, char *src)
+static void str_cpy_char_to_wide(u16 *dst, char *src)
 {
     while (*src)
     {
         *dst++ = *src++;
     }
-}
-
-static bool starts_with_substring(char *test, char *substring)
-{
-    while (*substring)
-    {
-        if (*substring != *test)
-        {
-            return false;
-        }
-        substring++;
-        test++;
-    }
-    
-    return true;
 }

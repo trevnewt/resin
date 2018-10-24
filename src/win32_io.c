@@ -6,8 +6,6 @@
 #define FILE_SHARE_READ      0x00000001
 #define OPEN_EXISTING        3
 
-#define CREATE_ALWAYS        2
-
 #define INVALID_HANDLE_VALUE (void *)((size)-1)
 
 #define STD_OUTPUT_HANDLE    (u32)-11
@@ -43,7 +41,7 @@ typedef struct {
     void *hEvent;
 } OVERLAPPED;
 
-void * __stdcall CreateFileA  (const char *file_name, u32 desired_access, u32 share_mode, SECURITY_ATTRIBUTES*, u32, u32, void *);
+void * __stdcall CreateFileA  (const char *file_name, u32 desired_access, u32 share_mode, SECURITY_ATTRIBUTES *sec_attribs, u32, u32, void *);
 bool   __stdcall GetFileSizeEx(void *, LARGE_INTEGER*);
 bool   __stdcall ReadFile     (void *file_handle, void *buffer, u32 bytes_to_read, u32 *bytes_read, OVERLAPPED *overlapped);
 void * __stdcall GetStdHandle (u32 handle);
@@ -58,29 +56,36 @@ typedef struct {
     bool error;
 } Win32FileContents;
 
-static void win32_print(char *string)
+static void win32_print(char *str)
 {
-    void *console_handle = GetStdHandle(STD_OUTPUT_HANDLE);
-    
-    u32 *bytes_written = 0;
-    WriteFile(console_handle, string, (u32)str_len(string), bytes_written, 0);
+    u32 written = 0;
+    WriteFile(GetStdHandle(STD_OUTPUT_HANDLE), str, (u32)str_len(str), &written, 0);
 }
 
-#if 0
-static void win32_print_2(char *a, char *b, char *c)
+static void win32_printf(char *buf, char *format, char *insert)
 {
-    u32 len = (u32)str_len(a) + (u32)str_len(b) + (u32)str_len(c);
-    void *str = malloc(len);
-    str_cpy(str, a);
-    str_cpy(str, b);
-    str_cpy(str, c);
+    u32 len = (u32)str_len(format) + (u32)str_len(insert);
+    char *dst = buf;
     
-    u32 bytes_written = 0;
-    WriteFile(GetStdHandle(STD_OUTPUT_HANDLE), str, len, &bytes_written, 0);
+    while (*format)
+    {
+        if (*format == '%')
+        {
+            *format++;
+            while (*insert)
+            {
+                *dst++ = *insert++;
+            }
+        }
+        else
+        {
+            *dst++ = *format++;
+        }
+    }
     
-    free(str);
+    u32 written = 0;
+    WriteFile(GetStdHandle(STD_OUTPUT_HANDLE), buf, len, &written, 0);
 }
-#endif
 
 static Win32FileContents win32_read_file(char *file_name)
 {
@@ -108,6 +113,7 @@ static Win32FileContents win32_read_file(char *file_name)
         }
         else
         {
+            result.error = true;
             // NOTE: LOGGING.
         }
         CloseHandle(file_handle);
